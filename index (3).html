@@ -1,0 +1,1404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Product Development Timeline with Profit Curve</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lodash.js/4.17.21/lodash.min.js"></script>
+    <style>
+        :root {
+            --background: #121212;
+            --surface: #1e1e1e;
+            --surface-hover: #2d2d2d;
+            --text-primary: #ffffff;
+            --text-secondary: #b0b0b0;
+            --border: #333333;
+            --primary: #7289da;
+            --primary-hover: #5e76c5;
+            --shadow: rgba(0, 0, 0, 0.5);
+            --profit-positive: #43b581;
+            --profit-negative: #f04747;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background-color: var(--background);
+            color: var(--text-primary);
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .header {
+            margin-bottom: 40px;
+            text-align: center;
+        }
+        
+        h1 {
+            font-size: 2.2rem;
+            font-weight: 600;
+            margin-bottom: 8px;
+            background: linear-gradient(90deg, #7289da, #5e76c5);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .subtitle {
+            color: var(--text-secondary);
+            font-size: 1rem;
+            margin-bottom: 20px;
+        }
+        
+        .controls {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 30px;
+        }
+        
+        .control-btn {
+            padding: 10px 18px;
+            background-color: var(--surface);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 0.9rem;
+            font-weight: 500;
+            outline: none;
+        }
+        
+        .control-btn:hover {
+            background-color: var(--surface-hover);
+            transform: translateY(-1px);
+        }
+        
+        .control-btn.active {
+            background-color: var(--primary);
+            border-color: var(--primary);
+        }
+        
+        .timeline-container {
+            background-color: var(--surface);
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 4px 12px var(--shadow);
+            margin-bottom: 30px;
+        }
+        
+        .profit-container {
+            background-color: var(--surface);
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 4px 12px var(--shadow);
+        }
+        
+        .timeline-header, .profit-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .timeline-title, .profit-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+        }
+        
+        .options {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .option-btn {
+            padding: 6px 12px;
+            background-color: var(--surface);
+            color: var(--text-secondary);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 0.8rem;
+        }
+        
+        .option-btn:hover {
+            background-color: var(--surface-hover);
+        }
+        
+        .option-btn.active {
+            color: var(--text-primary);
+            border-color: var(--primary);
+        }
+        
+        .tooltip {
+            position: absolute;
+            background: rgba(40, 40, 40, 0.95);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 10px;
+            font-size: 0.9rem;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s;
+            box-shadow: 0 4px 8px var(--shadow);
+            max-width: 300px;
+            z-index: 100;
+        }
+        
+        .tooltip-title {
+            font-weight: 600;
+            margin-bottom: 5px;
+            font-size: 1rem;
+            color: var(--primary);
+        }
+        
+        .tooltip-content {
+            color: var(--text-secondary);
+        }
+        
+        .tooltip-highlight {
+            color: var(--text-primary);
+            font-weight: 500;
+        }
+        
+        .axis text {
+            fill: var(--text-secondary);
+            font-size: 0.8rem;
+        }
+        
+        .axis .domain {
+            stroke: var(--border);
+        }
+        
+        .axis line {
+            stroke: var(--border);
+        }
+        
+        .product-label {
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+        
+        .stage-rect {
+            transition: all 0.2s ease;
+        }
+        
+        .stage-rect:hover {
+            opacity: 1;
+            stroke: #ffffff;
+            stroke-width: 2;
+        }
+        
+        .stage-text {
+            font-size: 0.7rem;
+            pointer-events: none;
+        }
+        
+        .legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-top: 30px;
+            justify-content: center;
+        }
+        
+        .legend-section {
+            display: flex;
+            flex-direction: column;
+            background-color: var(--surface);
+            padding: 15px;
+            border-radius: 8px;
+            min-width: 200px;
+        }
+        
+        .legend-title {
+            font-size: 0.9rem;
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: var(--primary);
+        }
+        
+        .legend-items {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+        
+        .legend-color {
+            width: 12px;
+            height: 12px;
+            border-radius: 3px;
+        }
+        
+        .timeline-footer, .profit-footer {
+            margin-top: 20px;
+            padding-top: 15px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .timeline-stats, .profit-stats {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+        
+        .timeline-actions, .profit-actions {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .action-btn {
+            padding: 6px 12px;
+            background-color: var(--surface);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 0.8rem;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .action-btn:hover {
+            background-color: var(--surface-hover);
+        }
+        
+        .action-btn i {
+            font-size: 0.9rem;
+        }
+        
+        .grid-line {
+            stroke: var(--border);
+            stroke-width: 0.5;
+            opacity: 0.5;
+        }
+        
+        .milestone {
+            stroke-width: 2;
+        }
+        
+        .timeline-scroll, .profit-scroll {
+            overflow-x: auto;
+            margin-bottom: 10px;
+        }
+        
+        .profit-line {
+            fill: none;
+            stroke-width: 3;
+            stroke-linejoin: round;
+            stroke-linecap: round;
+        }
+        
+        .profit-area-positive {
+            fill: var(--profit-positive);
+            opacity: 0.2;
+        }
+        
+        .profit-area-negative {
+            fill: var(--profit-negative);
+            opacity: 0.2;
+        }
+        
+        .profit-axis-label {
+            font-size: 0.8rem;
+            fill: var(--text-secondary);
+        }
+        
+        .profit-point {
+            cursor: pointer;
+        }
+        
+        .profit-point:hover {
+            stroke: #ffffff;
+            stroke-width: 2;
+        }
+        
+        .profit-grid-line {
+            stroke: var(--border);
+            stroke-width: 0.5;
+            opacity: 0.3;
+        }
+        
+        .breakeven-line {
+            stroke: var(--text-secondary);
+            stroke-width: 1;
+            stroke-dasharray: 5,5;
+        }
+        
+        .profit-stage-marker {
+            stroke-width: 1;
+            opacity: 0.7;
+        }
+        
+        .progress-indicator {
+            fill: var(--primary);
+            opacity: 0.9;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 15px;
+            }
+            
+            h1 {
+                font-size: 1.8rem;
+            }
+            
+            .timeline-container, .profit-container {
+                padding: 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Product Lifecycle Visualization</h1>
+            <p class="subtitle">Development Timeline and Profit Projection for G12R HYPERSOL, SURYAVA G12, and XBC</p>
+        </div>
+        
+        <div class="controls">
+            <button id="view-timeline" class="control-btn active">Timeline View</button>
+            <button id="view-profit" class="control-btn">Profit Projection</button>
+            <button id="view-combined" class="control-btn">Combined View</button>
+        </div>
+        
+        <div class="timeline-container">
+            <div class="timeline-header">
+                <div class="timeline-title">Development Timeline</div>
+                <div class="options">
+                    <button id="toggle-grid" class="option-btn active">Toggle Grid</button>
+                    <button id="toggle-labels" class="option-btn active">Toggle Labels</button>
+                </div>
+            </div>
+            
+            <div class="timeline-scroll">
+                <div id="timeline-chart"></div>
+            </div>
+            
+            <div class="timeline-footer">
+                <div class="timeline-stats">
+                    <span id="timeline-info">Product Development Timeline</span>
+                </div>
+                <div class="timeline-actions">
+                    <button id="export-timeline" class="action-btn">Export SVG</button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="profit-container">
+            <div class="profit-header">
+                <div class="profit-title">Profit Projection</div>
+                <div class="options">
+                    <button id="toggle-profit-grid" class="option-btn active">Toggle Grid</button>
+                    <button id="toggle-stage-markers" class="option-btn active">Toggle Stage Markers</button>
+                </div>
+            </div>
+            
+            <div class="profit-scroll">
+                <div id="profit-chart"></div>
+            </div>
+            
+            <div class="profit-footer">
+                <div class="profit-stats">
+                    <span id="profit-info">Product Profit Projection</span>
+                </div>
+                <div class="profit-actions">
+                    <button id="export-profit" class="action-btn">Export SVG</button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="legend" id="legend">
+            <!-- Legend will be generated here -->
+        </div>
+    </div>
+
+    <script>
+        // Create proper dates from the MM-YY format in the table
+        function createDate(dateStr) {
+            if (!dateStr || dateStr === '') return null;
+            
+            const [month, year] = dateStr.split('-');
+            const monthMap = {
+                'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
+                'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11
+            };
+            
+            return new Date(2000 + parseInt(year), monthMap[month], 1);
+        }
+
+        // Timeline data based on the image provided
+        const timelineData = [
+            // HYPERSOL G12R
+            { product: "HYPERSOL G12R", stage: "Market Study", start: createDate('Sep-24'), end: createDate('Sep-24'), stageNum: 1, profit: -50 },
+            { product: "HYPERSOL G12R", stage: "Ideation", start: createDate('Sep-24'), end: createDate('Sep-24'), stageNum: 2, profit: -45 },
+            { product: "HYPERSOL G12R", stage: "Feasibility Study", start: createDate('Oct-24'), end: createDate('Oct-24'), stageNum: 3, profit: -40 },
+            { product: "HYPERSOL G12R", stage: "Business Case", start: createDate('Oct-24'), end: createDate('Oct-24'), stageNum: 4, profit: -35 },
+            { product: "HYPERSOL G12R", stage: "Product Development", start: createDate('Nov-24'), end: createDate('Nov-24'), stageNum: 5, profit: -30 },
+            { product: "HYPERSOL G12R", stage: "Testing", start: createDate('Dec-24'), end: createDate('Feb-25'), stageNum: 6, profit: -25 },
+            { product: "HYPERSOL G12R", stage: "Certification", start: createDate('Mar-25'), end: createDate('Mar-25'), stageNum: 9, profit: -10 },
+            { product: "HYPERSOL G12R", stage: "Build up Trial", start: createDate('Mar-25'), end: createDate('Mar-25'), stageNum: 10, profit: -5 },
+            { product: "HYPERSOL G12R", stage: "ECN", start: createDate('Apr-25'), end: createDate('Apr-25'), stageNum: 11, profit: 0 },
+            { product: "HYPERSOL G12R", stage: "Introduction", start: createDate('Apr-25'), end: createDate('May-25'), stageNum: 12, profit: 40 },
+            { product: "HYPERSOL G12R", stage: "Growth", start: createDate('May-25'), end: createDate('Aug-25'), stageNum: 16, profit: 250 },
+            { product: "HYPERSOL G12R", stage: "Maturity", start: createDate('Sep-25'), end: createDate('Sep-26'), stageNum: 20, profit: 370 },
+            { product: "HYPERSOL G12R", stage: "Decline", start: createDate('Oct-26'), end: createDate('Feb-27'), stageNum: 24, profit: 200 },
+            
+            // SURYAVA G12
+            { product: "SURYAVA G12", stage: "Market Study", start: createDate('Feb-25'), end: createDate('Feb-25'), stageNum: 1, profit: -50 },
+            { product: "SURYAVA G12", stage: "Ideation", start: createDate('Feb-25'), end: createDate('Feb-25'), stageNum: 2, profit: -45 },
+            { product: "SURYAVA G12", stage: "Feasibility Study", start: createDate('Mar-25'), end: createDate('Mar-25'), stageNum: 3, profit: -40 },
+            { product: "SURYAVA G12", stage: "Business Case", start: createDate('Mar-25'), end: createDate('Mar-25'), stageNum: 4, profit: -35 },
+            { product: "SURYAVA G12", stage: "Product Development", start: createDate('Apr-25'), end: createDate('Apr-25'), stageNum: 5, profit: -30 },
+            { product: "SURYAVA G12", stage: "Testing", start: createDate('May-25'), end: createDate('Jul-25'), stageNum: 6, profit: -15 },
+            { product: "SURYAVA G12", stage: "Certification", start: createDate('Sep-25'), end: createDate('Sep-25'), stageNum: 9, profit: -10 },
+            { product: "SURYAVA G12", stage: "Build up Trial", start: createDate('Oct-25'), end: createDate('Oct-25'), stageNum: 10, profit: -5 },
+            { product: "SURYAVA G12", stage: "ECN", start: createDate('Nov-25'), end: createDate('Nov-25'), stageNum: 11, profit: 0 },
+            { product: "SURYAVA G12", stage: "Introduction", start: createDate('Nov-25'), end: createDate('Dec-25'), stageNum: 12, profit: 60 },
+            { product: "SURYAVA G12", stage: "Growth", start: createDate('Dec-25'), end: createDate('Mar-26'), stageNum: 16, profit: 250 },
+            { product: "SURYAVA G12", stage: "Maturity", start: createDate('Apr-26'), end: createDate('Apr-27'), stageNum: 20, profit: 370 },
+            { product: "SURYAVA G12", stage: "Decline", start: createDate('May-27'), end: createDate('Jul-27'), stageNum: 24, profit: 200 },
+            
+            // XBC
+            { product: "XBC", stage: "Market Study", start: createDate('Jan-26'), end: createDate('Jan-26'), stageNum: 1, profit: -50 },
+            { product: "XBC", stage: "Ideation", start: createDate('Jan-26'), end: createDate('Jan-26'), stageNum: 2, profit: -45 },
+            { product: "XBC", stage: "Feasibility Study", start: createDate('Feb-26'), end: createDate('Feb-26'), stageNum: 3, profit: -40 },
+            { product: "XBC", stage: "Business Case", start: createDate('Feb-26'), end: createDate('Feb-26'), stageNum: 4, profit: -35 },
+            { product: "XBC", stage: "Product Development", start: createDate('Mar-26'), end: createDate('Mar-26'), stageNum: 5, profit: -30 },
+            { product: "XBC", stage: "Testing", start: createDate('Apr-26'), end: createDate('Jun-26'), stageNum: 6, profit: -15 },
+            { product: "XBC", stage: "Certification", start: createDate('Jul-26'), end: createDate('Jul-26'), stageNum: 9, profit: -10 },
+            { product: "XBC", stage: "Build up Trial", start: createDate('Aug-26'), end: createDate('Aug-26'), stageNum: 10, profit: -5 },
+            { product: "XBC", stage: "ECN", start: createDate('Sep-26'), end: createDate('Sep-26'), stageNum: 11, profit: 0 },
+            { product: "XBC", stage: "Introduction", start: createDate('Sep-26'), end: createDate('Oct-26'), stageNum: 12, profit: 60 },
+            { product: "XBC", stage: "Growth", start: createDate('Oct-26'), end: createDate('Jan-27'), stageNum: 16, profit: 250 },
+            { product: "XBC", stage: "Maturity", start: createDate('Feb-27'), end: createDate('Feb-28'), stageNum: 20, profit: 370 },
+            { product: "XBC", stage: "Decline", start: createDate('Mar-28'), end: createDate('May-28'), stageNum: 24, profit: 200 }
+        ];
+
+        // Generate profit curves that match the expected S-curve shape in the second image
+        // Generate smooth profit data with less decline at the end
+function generateSmoothProfitData(product, startDate, peakDate, endDate, maxProfit) {
+    const points = [];
+    const totalMonths = Math.ceil((endDate - startDate) / (30 * 24 * 60 * 60 * 1000));
+    
+    for (let i = 0; i <= totalMonths; i++) {
+        const date = new Date(startDate);
+        date.setMonth(date.getMonth() + i);
+        
+        // Calculate progress as a value between 0 and 1
+        const progress = i / totalMonths;
+        
+        // Calculate time to peak as a value between 0 and 1
+        const peakTime = (peakDate - startDate) / (endDate - startDate);
+        
+        // Calculate profit using a modified curve that rises and then has minimal decline
+        let profit;
+        if (progress <= peakTime) {
+            // Rising part - use sigmoid
+            profit = maxProfit * (1 / (1 + Math.exp(-12 * (progress / peakTime - 0.5))));
+        } else {
+            // After peak - use a gentler decline curve that maintains higher values
+            const fallProgress = (progress - peakTime) / (1 - peakTime);
+            
+            // This formula creates a much gentler decline - adjust the 0.2 to control the decline steepness
+            // Lower values (like 0.1) make the decline even more gentle
+            profit = maxProfit * (1 - 0.6 * (fallProgress * fallProgress));
+        }
+        
+        // Add negative profits for early stages (development phase)
+        if (i < totalMonths * 0.15) {
+            profit = -50 + (i / (totalMonths * 0.15)) * 50;
+        }
+        
+        points.push({
+            date: date,
+            profit: Math.round(profit),
+            product: product
+        });
+    }
+    
+    return points;
+}
+
+// Example usage:
+// const smoothProfitDataG12R = generateSmoothProfitData("HYPERSOL G12R", g12rStartDate, g12rPeakDate, g12rEndDate, 370);
+
+        // Generate smooth profit data for each product
+        const g12rStartDate = createDate('Sep-24');
+        const g12rPeakDate = createDate('May-26');
+        const g12rEndDate = createDate('Feb-27');
+        
+        const suryavaStartDate = createDate('Feb-25');
+        const suryavaPeakDate = createDate('Nov-26');
+        const suryavaEndDate = createDate('Jul-27');
+        
+        const xbcStartDate = createDate('Jan-26');
+        const xbcPeakDate = createDate('Aug-27');
+        const xbcEndDate = createDate('May-28');
+
+        const smoothProfitDataG12R = generateSmoothProfitData("HYPERSOL G12R", g12rStartDate, g12rPeakDate, g12rEndDate, 370);
+        const smoothProfitDataSuryava = generateSmoothProfitData("SURYAVA G12", suryavaStartDate, suryavaPeakDate, suryavaEndDate, 370);
+        const smoothProfitDataXBC = generateSmoothProfitData("XBC", xbcStartDate, xbcPeakDate, xbcEndDate, 370);
+
+        // Combined smooth profit data
+        const smoothProfitData = [...smoothProfitDataG12R, ...smoothProfitDataSuryava, ...smoothProfitDataXBC];
+
+        // Merge stage information into profit data
+        const profitData = smoothProfitData.map(item => {
+            // Find closest stage for this date and product
+            const stages = timelineData.filter(d => 
+                d.product === item.product && 
+                d.start <= item.date && 
+                d.end >= item.date
+            );
+            
+            const stage = stages.length ? stages[0].stage : "";
+            const stageNum = stages.length ? stages[0].stageNum : 0;
+            
+            return {
+                ...item,
+                stage: stage,
+                stageNum: stageNum
+            };
+        });
+        
+        // Stage colors
+        const stageColors = {
+            "Market Study": "#8ecae6",
+            "Ideation": "#219ebc",
+            "Feasibility Study": "#023047",
+            "Business Case": "#ffb703",
+            "Product Development": "#fb8500",
+            "Testing": "#0077b6",
+            "Certification": "#00b4d8",
+            "Build up Trial": "#90e0ef",
+            "ECN": "#caf0f8",
+            "Introduction": "#0466c8",
+            "Growth": "#0353a4",
+            "Maturity": "#023e7d",
+            "Decline": "#001845"
+        };
+
+        // Product colors
+        const productColors = {
+            "HYPERSOL G12R": "#7289da",
+            "SURYAVA G12": "#43b581",
+            "XBC": "#f04747"
+        };
+
+        // Create legend
+        function createLegend() {
+            const legend = d3.select("#legend");
+            legend.html("");
+            
+            // Create legend for stages
+            const stageSection = legend.append("div")
+                .attr("class", "legend-section");
+            
+            stageSection.append("div")
+                .attr("class", "legend-title")
+                .text("Product Lifecycle Stages");
+            
+            const stageItems = stageSection.append("div")
+                .attr("class", "legend-items");
+            
+            // Group stages by phase
+            const phaseGroups = {
+                "Planning": ["Market Study", "Ideation", "Feasibility Study", "Business Case"],
+                "Development": ["Product Development", "Testing", "Certification", "Build up Trial", "ECN"],
+                "Market": ["Introduction", "Growth", "Maturity", "Decline"]
+            };
+            
+            Object.entries(phaseGroups).forEach(([phase, stages]) => {
+                const phaseDiv = stageItems.append("div")
+                    .style("margin-bottom", "8px")
+                    .style("width", "100%");
+                
+                phaseDiv.append("div")
+                    .style("font-weight", "600")
+                    .style("margin-bottom", "4px")
+                    .style("color", "var(--text-primary)")
+                    .text(phase);
+                
+                stages.forEach(stage => {
+                    if (stageColors[stage]) {
+                        const item = phaseDiv.append("div")
+                            .attr("class", "legend-item");
+                        
+                        item.append("div")
+                            .attr("class", "legend-color")
+                            .style("background-color", stageColors[stage]);
+                        
+                        item.append("span")
+                            .text(stage);
+                    }
+                });
+            });
+            
+            // Create legend for profit
+            const profitSection = legend.append("div")
+                .attr("class", "legend-section");
+            
+            profitSection.append("div")
+                .attr("class", "legend-title")
+                .text("Profit Indicators");
+            
+            const profitItems = profitSection.append("div")
+                .attr("class", "legend-items");
+            
+            const profitLegendItems = [
+                { name: "Positive Profit", color: "var(--profit-positive)" },
+                { name: "Negative Profit", color: "var(--profit-negative)" },
+                { name: "Break-even Point", color: "var(--text-secondary)" }
+            ];
+            
+            profitLegendItems.forEach(item => {
+                const legendItem = profitItems.append("div")
+                    .attr("class", "legend-item");
+                
+                legendItem.append("div")
+                    .attr("class", "legend-color")
+                    .style("background-color", item.color);
+                
+                legendItem.append("span")
+                    .text(item.name);
+            });
+            
+            // Add product section to legend
+            updateLegend();
+        }
+        
+        // Function to update legend with product colors
+        function updateLegend() {
+            const legend = d3.select("#legend");
+            
+            // Create or update product section in legend
+            let productSection = legend.select(".product-section");
+            if (productSection.empty()) {
+                productSection = legend.append("div")
+                    .attr("class", "legend-section product-section");
+                
+                productSection.append("div")
+                    .attr("class", "legend-title")
+                    .text("Products");
+                
+                productSection.append("div")
+                    .attr("class", "legend-items");
+            }
+            
+            const productItems = productSection.select(".legend-items");
+            
+            // Clear existing items
+            productItems.html("");
+            
+            // Add product colors to legend
+            Object.entries(productColors).forEach(([product, color]) => {
+                const item = productItems.append("div")
+                    .attr("class", "legend-item");
+                
+                item.append("div")
+                    .attr("class", "legend-color")
+                    .style("background-color", color);
+                
+                item.append("span")
+                    .text(product);
+            });
+        }
+
+        // Function to format date
+function formatDate(date) {
+    if (!date) return "";
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    return `${months[date.getMonth()]} ${date.getFullYear()}`;
+}
+
+// Create timeline visualization
+function createTimeline() {
+    d3.select("#timeline-chart").html("");
+    
+    // Set up svg dimensions
+    const margin = { top: 40, right: 60, bottom: 60, left: 150 };
+    const width = 1000 - margin.left - margin.right;
+    const height = 300 - margin.top - margin.bottom; // Increased height to accommodate more products
+    
+    // Find date range
+    const minDate = d3.min(timelineData, d => d.start);
+    const maxDate = d3.max(timelineData, d => d.end);
+    
+    // Create scales
+    const x = d3.scaleTime()
+        .domain([minDate, maxDate])
+        .range([0, width]);
+    
+    const y = d3.scaleBand()
+        .domain([...new Set(timelineData.map(d => d.product))])
+        .range([0, height])
+        .padding(0.2);
+    
+    // Create SVG
+    const svg = d3.select("#timeline-chart")
+        .append("svg")
+        .attr("width", width + margin.left + margin.right)
+        .attr("height", height + margin.top + margin.bottom)
+        .append("g")
+        .attr("transform", `translate(${margin.left},${margin.top})`);
+    
+    // Add clip path
+    svg.append("defs").append("clipPath")
+        .attr("id", "clip-timeline")
+        .append("rect")
+        .attr("width", width)
+        .attr("height", height);
+    
+    // Add grid lines
+    const gridVisible = true;
+    const gridLines = svg.append("g")
+        .attr("class", "grid-lines")
+        .attr("clip-path", "url(#clip-timeline)");
+    
+    if (gridVisible) {
+        // Add vertical grid lines
+        gridLines.selectAll(".vertical-grid")
+            .data(x.ticks(d3.timeMonth.every(1)))
+            .enter()
+            .append("line")
+            .attr("class", "grid-line vertical-grid")
+            .attr("x1", d => x(d))
+            .attr("y1", 0)
+            .attr("x2", d => x(d))
+            .attr("y2", height);
+        
+        // Add horizontal grid lines for all products
+        gridLines.selectAll(".horizontal-grid")
+            .data([...new Set(timelineData.map(d => d.product))])
+            .enter()
+            .append("line")
+            .attr("class", "grid-line horizontal-grid")
+            .attr("x1", 0)
+            .attr("y1", d => y(d) + y.bandwidth() / 2)
+            .attr("x2", width)
+            .attr("y2", d => y(d) + y.bandwidth() / 2);
+    }
+    
+    // Create today line
+    const today = new Date();
+    if (today >= minDate && today <= maxDate) {
+        svg.append("line")
+            .attr("class", "today-line")
+            .attr("x1", x(today))
+            .attr("y1", 0)
+            .attr("x2", x(today))
+            .attr("y2", height)
+            .attr("stroke", "#f04747")
+            .attr("stroke-width", 2)
+            .attr("stroke-dasharray", "5,5");
+        
+        svg.append("text")
+            .attr("x", x(today))
+            .attr("y", -10)
+            .attr("text-anchor", "middle")
+            .attr("fill", "#f04747")
+            .attr("font-size", "0.8rem")
+            .text("Today");
+    }
+    
+    // Create x-axis
+    const xAxis = svg.append("g")
+        .attr("class", "axis x-axis")
+        .attr("transform", `translate(0,${height})`)
+        .call(d3.axisBottom(x)
+            .ticks(d3.timeMonth.every(3))
+            .tickFormat(d3.timeFormat("%b %Y"))
+            .tickSize(-5));
+    
+    xAxis.selectAll("text")
+        .style("text-anchor", "end")
+        .attr("dx", "-.8em")
+        .attr("dy", ".15em")
+        .attr("transform", "rotate(-45)");
+    
+    // Create y-axis
+    const yAxis = svg.append("g")
+        .attr("class", "axis y-axis")
+        .call(d3.axisLeft(y)
+            .tickSize(-5));
+    
+    yAxis.selectAll("text")
+        .attr("class", "product-label")
+        .style("fill", d => productColors[d] || "#7289da");
+    
+    // Create tooltip
+    const tooltip = d3.select("body")
+        .append("div")
+        .attr("class", "tooltip");
+    
+    // Create main chart group
+    const chart = svg.append("g")
+        .attr("class", "chart-group")
+        .attr("clip-path", "url(#clip-timeline)");
+    
+    // Draw background for products - updated for all products
+    chart.selectAll(".product-background")
+        .data([...new Set(timelineData.map(d => d.product))])
+        .enter()
+        .append("rect")
+        .attr("class", "product-background")
+        .attr("x", 0)
+        .attr("y", d => y(d) - y.bandwidth() * 0.1)
+        .attr("width", width)
+        .attr("height", y.bandwidth() * 1.2)
+        .attr("fill", "var(--surface-hover)")
+        .attr("opacity", 0.3)
+        .attr("rx", 4)
+        .attr("ry", 4);
+    
+    // Draw rectangles for each stage
+    chart.selectAll(".stage-rect")
+        .data(timelineData)
+        .enter()
+        .append("rect")
+        .attr("class", "stage-rect")
+        .attr("x", d => x(d.start))
+        .attr("y", d => y(d.product))
+        .attr("width", d => Math.max(4, x(d.end) - x(d.start)))
+        .attr("height", y.bandwidth())
+        .attr("rx", 3)
+        .attr("ry", 3)
+        .attr("fill", d => stageColors[d.stage])
+        .attr("opacity", 0.9)
+        .on("mouseover", function(event, d) {
+            d3.select(this)
+                .attr("stroke", "#ffffff")
+                .attr("stroke-width", 2);
+            
+            tooltip.transition()
+                .duration(200)
+                .style("opacity", 0.9);
+            
+            tooltip.html(`
+                <div class="tooltip-title">${d.stage}</div>
+                <div class="tooltip-content">
+                    Product: <span class="tooltip-highlight">${d.product}</span><br>
+                    Period: <span class="tooltip-highlight">${formatDate(d.start)} - ${formatDate(d.end)}</span><br>
+                    Profit: <span class="tooltip-highlight">${d.profit}</span>
+                </div>
+            `)
+            .style("left", (event.pageX + 15) + "px")
+            .style("top", (event.pageY - 30) + "px");
+        })
+        .on("mouseout", function() {
+            d3.select(this)
+                .attr("stroke", "none");
+            
+            tooltip.transition()
+                .duration(500)
+                .style("opacity", 0);
+        });
+    
+    // Add stage labels if there's enough space
+    const labelsVisible = true;
+    if (labelsVisible) {
+        chart.selectAll(".stage-text")
+            .data(timelineData)
+            .enter()
+            .append("text")
+            .attr("class", "stage-text")
+            .attr("x", d => x(d.start) + (x(d.end) - x(d.start)) / 2)
+            .attr("y", d => y(d.product) + y.bandwidth() / 2)
+            .attr("text-anchor", "middle")
+            .attr("dominant-baseline", "middle")
+            .attr("fill", d => {
+                // Calculate brightness of background color to determine text color
+                const c = d3.color(stageColors[d.stage]);
+                const brightness = (c.r * 299 + c.g * 587 + c.b * 114) / 1000;
+                return brightness > 125 ? "#000000" : "#ffffff";
+            })
+            .text(d => {
+                const width = x(d.end) - x(d.start);
+                return width > 50 ? d.stage : "";
+            });
+    }
+    
+    // Update timeline info in footer
+    const productNames = [...new Set(timelineData.map(d => d.product))].join(", ");
+    d3.select("#timeline-info").text(`${productNames} Development Timeline`);
+}
+
+// Function to consolidate monthly data for profit chart
+function consolidateMonthlyData(data) {
+    // Group by month
+    const monthlyGroups = {};
+    
+    data.forEach(item => {
+        // Create a key based on year and month only
+        const date = item.date;
+        const monthKey = `${date.getFullYear()}-${date.getMonth()}`;
+        
+        if (!monthlyGroups[monthKey]) {
+            monthlyGroups[monthKey] = {
+                date: new Date(date.getFullYear(), date.getMonth(), 1), // First day of month
+                stages: [],
+                profits: [],
+                // Use the average profit for display
+                profit: item.profit
+            };
+        }
+        
+        // Add this stage and profit to the group
+        monthlyGroups[monthKey].stages.push(item.stage);
+        monthlyGroups[monthKey].profits.push(item.profit);
+        
+        // For consolidated points, use the average or last profit value
+        monthlyGroups[monthKey].profit = item.profit; // Using the last value for simplicity
+    });
+    
+    // Convert back to array
+    return Object.values(monthlyGroups);
+}
+
+// Create profit visualization
+function createProfitChart() {
+    d3.select("#profit-chart").html("");
+    
+    // Set up svg dimensions
+    const margin = { top: 40, right: 60, bottom: 60, left: 60 };
+    const width = 1000 - margin.left - margin.right;
+    const height = 300 - margin.top - margin.bottom;
+    
+    // Group profit data by product
+    const productGroups = d3.group(profitData, d => d.product);
+    
+    // Process each product's data
+    const processedData = Array.from(productGroups, ([product, data]) => {
+        const consolidatedData = consolidateMonthlyData(data);
+        return { 
+            product: product, 
+            data: consolidatedData 
+        };
+    });
+    
+    // Find all unique dates across all products for the x-axis
+    const allDates = [];
+    processedData.forEach(group => {
+        group.data.forEach(d => {
+            if (!allDates.find(date => date.getTime() === d.date.getTime())) {
+                allDates.push(d.date);
+            }
+        });
+    });
+    allDates.sort((a, b) => a - b);
+    
+    // Create scales
+    const x = d3.scaleTime()
+        .domain([d3.min(allDates), d3.max(allDates)])
+        .range([0, width]);
+    
+    // Find global min and max for y-axis
+    const allProfits = [];
+    processedData.forEach(group => {
+        group.data.forEach(d => {
+            allProfits.push(d.profit);
+        });
+    });
+    
+    const y = d3.scaleLinear()
+        .domain([
+            d3.min(allProfits) * 1.1, // Add 10% padding
+            d3.max(allProfits) * 1.1
+        ])
+        .range([height, 0]);
+    
+    // Create SVG
+    const svg = d3.select("#profit-chart")
+        .append("svg")
+        .attr("width", width + margin.left + margin.right)
+        .attr("height", height + margin.top + margin.bottom)
+        .append("g")
+        .attr("transform", `translate(${margin.left},${margin.top})`);
+    
+    // Add clip path
+    svg.append("defs").append("clipPath")
+        .attr("id", "clip-profit")
+        .append("rect")
+        .attr("width", width)
+        .attr("height", height);
+    
+    // Add grid lines
+    const gridVisible = true;
+    if (gridVisible) {
+        // Add x grid lines
+        svg.append("g")
+            .attr("class", "grid x-grid")
+            .attr("transform", `translate(0,${height})`)
+            .call(d3.axisBottom(x)
+                .ticks(d3.timeMonth.every(3))
+                .tickSize(-height)
+                .tickFormat(""))
+            .selectAll("line")
+            .attr("class", "profit-grid-line");
+        
+        // Add y grid lines
+        svg.append("g")
+            .attr("class", "grid y-grid")
+            .call(d3.axisLeft(y)
+                .tickSize(-width)
+                .tickFormat(""))
+            .selectAll("line")
+            .attr("class", "profit-grid-line");
+    }
+    
+    // Create break-even line
+    svg.append("line")
+        .attr("class", "breakeven-line")
+        .attr("x1", 0)
+        .attr("y1", y(0))
+        .attr("x2", width)
+        .attr("y2", y(0));
+    
+    svg.append("text")
+        .attr("class", "profit-axis-label")
+        .attr("x", 5)
+        .attr("y", y(0) - 5)
+        .text("Break-even");
+    
+    // Create today line
+    const today = new Date();
+    if (today >= d3.min(allDates) && today <= d3.max(allDates)) {
+        svg.append("line")
+            .attr("class", "today-line")
+            .attr("x1", x(today))
+            .attr("y1", 0)
+            .attr("x2", x(today))
+            .attr("y2", height)
+            .attr("stroke", "#f04747")
+            .attr("stroke-width", 2)
+            .attr("stroke-dasharray", "5,5");
+        
+        svg.append("text")
+            .attr("x", x(today))
+            .attr("y", -10)
+            .attr("text-anchor", "middle")
+            .attr("fill", "#f04747")
+            .attr("font-size", "0.8rem")
+            .text("Today");
+    }
+    
+    // Create x-axis
+    const xAxis = svg.append("g")
+        .attr("class", "axis x-axis")
+        .attr("transform", `translate(0,${height})`)
+        .call(d3.axisBottom(x)
+            .ticks(d3.timeMonth.every(3))
+            .tickFormat(d3.timeFormat("%b %Y")));
+    
+    xAxis.selectAll("text")
+        .style("text-anchor", "end")
+        .attr("dx", "-.8em")
+        .attr("dy", ".15em")
+        .attr("transform", "rotate(-45)");
+    
+    // Create y-axis
+    const yAxis = svg.append("g")
+        .attr("class", "axis y-axis")
+        .call(d3.axisLeft(y)
+            .tickFormat(d => `${d}`));
+    
+    // Add y-axis label
+    svg.append("text")
+        .attr("class", "profit-axis-label")
+        .attr("transform", "rotate(-90)")
+        .attr("x", -height / 2)
+        .attr("y", -40)
+        .attr("text-anchor", "middle")
+        .text("Profit (cr.)");
+    
+    // Create tooltip
+    const tooltip = d3.select("body")
+        .append("div")
+        .attr("class", "tooltip");
+    
+    // Create main chart group
+    const chart = svg.append("g")
+        .attr("class", "chart-group")
+        .attr("clip-path", "url(#clip-profit)");
+    
+    // Create line generator
+    const line = d3.line()
+        .x(d => x(d.date))
+        .y(d => y(d.profit))
+        .curve(d3.curveMonotoneX);
+    
+    // Draw a line for each product
+    processedData.forEach(group => {
+        // Create areas for positive and negative profits
+        const areaPositive = d3.area()
+            .x(d => x(d.date))
+            .y0(y(0))
+            .y1(d => d.profit >= 0 ? y(d.profit) : y(0))
+            .curve(d3.curveMonotoneX);
+        
+        const areaNegative = d3.area()
+            .x(d => x(d.date))
+            .y0(y(0))
+            .y1(d => d.profit < 0 ? y(d.profit) : y(0))
+            .curve(d3.curveMonotoneX);
+        
+        // Draw areas with lower opacity
+        chart.append("path")
+            .datum(group.data)
+            .attr("class", "profit-area-positive")
+            .attr("d", areaPositive)
+            .attr("fill", productColors[group.product])
+            .attr("opacity", 0.1);
+        
+        chart.append("path")
+            .datum(group.data)
+            .attr("class", "profit-area-negative")
+            .attr("d", areaNegative)
+            .attr("fill", productColors[group.product])
+            .attr("opacity", 0.1);
+        
+        // Draw the line for this product
+        chart.append("path")
+            .datum(group.data)
+            .attr("class", "profit-line")
+            .attr("stroke", productColors[group.product])
+            .attr("d", line);
+        
+        // Add profit points for this product
+        chart.selectAll(`.profit-point-${group.product.replace(/\s+/g, '-')}`)
+            .data(group.data)
+            .enter()
+            .append("circle")
+            .attr("class", `profit-point profit-point-${group.product.replace(/\s+/g, '-')}`)
+            .attr("cx", d => x(d.date))
+            .attr("cy", d => y(d.profit))
+            .attr("r", 4)
+            .attr("fill", productColors[group.product])
+            .on("mouseover", function(event, d) {
+                d3.select(this)
+                    .attr("r", 6);
+                
+                tooltip.transition()
+                    .duration(200)
+                    .style("opacity", 0.9);
+                
+                tooltip.html(`
+                    <div class="tooltip-title">${group.product}</div>
+                    <div class="tooltip-content">
+                        Date: <span class="tooltip-highlight">${formatDate(d.date)}</span><br>
+                        Profit: <span class="tooltip-highlight">${d.profit}</span>
+                    </div>
+                `)
+                .style("left", (event.pageX + 15) + "px")
+                .style("top", (event.pageY - 30) + "px");
+            })
+            .on("mouseout", function() {
+                d3.select(this)
+                    .attr("r", 4);
+                
+                tooltip.transition()
+                    .duration(500)
+                    .style("opacity", 0);
+            });
+    });
+    
+    // Add stage markers if enabled
+    const stageMarkersVisible = true;
+    if (stageMarkersVisible) {
+        // For each product, add markers for stage transitions
+        processedData.forEach(group => {
+            // Get stage transitions for this product
+            const stageTransitions = [];
+            let lastStage = null;
+            
+            // Find all the original data points where stage changes
+            profitData.filter(d => d.product === group.product).forEach(d => {
+                if (d.stage !== lastStage) {
+                    stageTransitions.push(d);
+                    lastStage = d.stage;
+                }
+            });
+            
+            // Add markers for this product's stage transitions
+            chart.selectAll(`.profit-stage-marker-${group.product.replace(/\s+/g, '-')}`)
+                .data(stageTransitions)
+                .enter()
+                .append("circle")
+                .attr("class", `profit-stage-marker profit-stage-marker-${group.product.replace(/\s+/g, '-')}`)
+                .attr("cx", d => x(d.date))
+                .attr("cy", d => {
+                    // Find corresponding processed data point
+                    const dataPoint = group.data.find(item => 
+                        item.date.getFullYear() === d.date.getFullYear() && 
+                        item.date.getMonth() === d.date.getMonth()
+                    );
+                    return dataPoint ? y(dataPoint.profit) : y(0);
+                })
+                .attr("r", 5)
+                .attr("stroke", productColors[group.product])
+                .attr("stroke-width", 2)
+                .attr("fill", d => stageColors[d.stage])
+                .on("mouseover", function(event, d) {
+                    d3.select(this)
+                        .attr("r", 7);
+                    
+                    tooltip.transition()
+                        .duration(200)
+                        .style("opacity", 0.9);
+                    
+                    tooltip.html(`
+                        <div class="tooltip-title">${group.product}</div>
+                        <div class="tooltip-content">
+                            Stage: <span class="tooltip-highlight">${d.stage}</span><br>
+                            Date: <span class="tooltip-highlight">${formatDate(d.date)}</span><br>
+                            Profit: <span class="tooltip-highlight">${d.profit}</span>
+                        </div>
+                    `)
+                    .style("left", (event.pageX + 15) + "px")
+                    .style("top", (event.pageY - 30) + "px");
+                })
+                .on("mouseout", function() {
+                    d3.select(this)
+                        .attr("r", 5);
+                    
+                    tooltip.transition()
+                        .duration(500)
+                        .style("opacity", 0);
+                });
+        });
+    }
+    
+    // Update the product info in the footer
+    const productNames = [...new Set(profitData.map(d => d.product))].join(", ");
+    d3.select("#profit-info").text(`${productNames} Profit Projection`);
+}
+
+// Event handlers for buttons
+function setupEventHandlers() {
+    // View buttons
+    d3.select("#view-timeline").on("click", function() {
+        d3.selectAll(".control-btn").classed("active", false);
+        d3.select(this).classed("active", true);
+        d3.select(".timeline-container").style("display", "block");
+        d3.select(".profit-container").style("display", "none");
+    });
+    
+    d3.select("#view-profit").on("click", function() {
+        d3.selectAll(".control-btn").classed("active", false);
+        d3.select(this).classed("active", true);
+        d3.select(".timeline-container").style("display", "none");
+        d3.select(".profit-container").style("display", "block");
+    });
+    
+    d3.select("#view-combined").on("click", function() {
+        d3.selectAll(".control-btn").classed("active", false);
+        d3.select(this).classed("active", true);
+        d3.select(".timeline-container").style("display", "block");
+        d3.select(".profit-container").style("display", "block");
+    });
+    
+    // Timeline options
+    d3.select("#toggle-grid").on("click", function() {
+        const active = !d3.select(this).classed("active");
+        d3.select(this).classed("active", active);
+        d3.selectAll(".grid-line").style("opacity", active ? 0.5 : 0);
+    });
+    
+    d3.select("#toggle-labels").on("click", function() {
+        const active = !d3.select(this).classed("active");
+        d3.select(this).classed("active", active);
+        d3.selectAll(".stage-text").style("opacity", active ? 1 : 0);
+    });
+    
+    // Profit options
+    d3.select("#toggle-profit-grid").on("click", function() {
+        const active = !d3.select(this).classed("active");
+        d3.select(this).classed("active", active);
+        d3.selectAll(".profit-grid-line").style("opacity", active ? 0.3 : 0);
+    });
+    
+    d3.select("#toggle-stage-markers").on("click", function() {
+        const active = !d3.select(this).classed("active");
+        d3.select(this).classed("active", active);
+        d3.selectAll(".profit-stage-marker").style("opacity", active ? 0.7 : 0);
+    });
+    
+    // Export buttons
+    d3.select("#export-timeline").on("click", function() {
+        const svg = document.querySelector("#timeline-chart svg");
+        const serializer = new XMLSerializer();
+        const svgStr = serializer.serializeToString(svg);
+        
+        const link = document.createElement('a');
+        link.href = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgStr);
+        link.download = 'product_timeline.svg';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    });
+    
+    d3.select("#export-profit").on("click", function() {
+        const svg = document.querySelector("#profit-chart svg");
+        const serializer = new XMLSerializer();
+        const svgStr = serializer.serializeToString(svg);
+        
+        const link = document.createElement('a');
+        link.href = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgStr);
+        link.download = 'product_profit.svg';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    });
+}
+
+// Initialize the visualization
+function init() {
+    // Create legend
+    createLegend();
+    
+    // Create timeline chart
+    createTimeline();
+    
+    // Create profit chart
+    createProfitChart();
+    
+    // Set up event handlers
+    setupEventHandlers();
+    
+    // Set initial view
+    d3.select(".timeline-container").style("display", "block");
+    d3.select(".profit-container").style("display", "block");
+}
+
+// Run the initialization
+init();
+</script>
+</body>
+</html>
